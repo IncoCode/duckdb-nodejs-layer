@@ -1,0 +1,69 @@
+FROM lambci/lambda:build-python3.6
+
+ENV _TOOL_PACKAGES="\
+  autoconf \
+  automake \
+  bash-completion \
+  cmake \
+  curl \
+  file \
+  gcc \
+  git \
+  jq \
+  libtool \
+  make \
+  man-db \
+  man-pages \
+  pcre-tools \
+  pkgconfig \
+  python-pip \
+  python34-pip \
+  sudo \
+  tree \
+  unzip \
+  wget \
+  which \
+  zip \
+  "
+ENV _STATIC_PACKAGES="\
+  glibc-static \
+  openssl-static \
+  pcre-static \
+  zlib-static \
+  "
+
+ENV _DEVEL_PACKAGES="\
+  binutils-devel \
+  openssl-devel \
+  kernel-devel \
+  libcurl-devel \
+  libffi-devel \
+  pcre-devel \
+  python-devel \
+  python34-devel \
+  xz-devel \
+  zlib-devel \
+  "
+
+# upgrade all packages, install epel, then install build requirements
+RUN yum install -y epel-release yum-plugin-ovl >/dev/null && \
+  yum upgrade -y > /dev/null && \
+  yum install -y ${_TOOL_PACKAGES} ${_STATIC_PACKAGES} ${_DEVEL_PACKAGES} && \
+  yum clean all
+
+# install and upgrade pip and utils
+RUN pip install --upgrade pip setuptools cmake
+
+ARG BRANCH=main
+
+# Get DuckDB sources
+RUN mkdir -p /tmp/from-git && cd /tmp/from-git && git clone https://github.com/duckdblabs/duckdb_spatial --branch $BRANCH --recurse-submodules --depth 1
+
+RUN cd /tmp/from-git/duckdb_spatial && \
+  export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH" && \
+  STATIC_OPENSSL=1 STATIC_LIBCPP=1 OPENSSL_STATIC=1 OPENSSL_LIB_DIR=/usr/lib64 OPENSSL_INCLUDE_DIR=/usr/include CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) make release
+
+RUN strip --strip-unneeded /tmp/from-git/geo/build/release/extension/duckdb_spatial/spatial.duckdb_extension
+
+# Create zip file with layer contents
+RUN mkdir -p /tmp/release && cp /tmp/from-git/duckdb_spatial/build/release/extension/duckdb_spatial/spatial.duckdb_extension /tmp/release/spatial.duckdb_extension
