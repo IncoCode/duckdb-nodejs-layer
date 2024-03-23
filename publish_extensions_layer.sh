@@ -16,6 +16,16 @@ ARCHITECTURE="$1"
 # Set description
 DESCRIPTION="Run DuckDB Node.js in AWS Lambda with extensions (https://github.com/tobilg/duckdb-nodejs-layer) for ${ARCHITECTURE}"
 
+# Set regions when x86_64
+if [[ $ARCHITECTURE == "x86_64" ]]; then
+  # List sourced from SSM
+  REGIONS=$(aws ssm get-parameters-by-path --region us-east-1 \
+    --path /aws/service/global-infrastructure/regions \
+    --query 'Parameters[].Value | sort(@)' --output text)
+  # Set layer name
+  LAYER_NAME="duckdb-nodejs-x86"
+fi
+
 ls -la $GITHUB_WORKSPACE/
 
 for region in ${REGIONS[@]}; do
